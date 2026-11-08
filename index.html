@@ -17,6 +17,7 @@
 
 *{box-sizing:border-box;}
 html,body{height:100%;margin:0;}
+html{overflow-x:clip;}
 body{
   background:#1a120c; color:var(--ink);
   cursor: url("balance-weight-cursor.svg") 24 43, pointer;
@@ -149,7 +150,7 @@ header.glass{
 .ambience-toggle{
   position:absolute;top:.7rem;right:.8rem;display:grid;place-items:center;
   width:2rem;height:2rem;padding:0;border:0;border-radius:50%;
-  z-index:2;background:transparent;color:#111;overflow:visible;
+  z-index:2;background:transparent;color:var(--gold);overflow:visible;
   cursor:inherit;transition:color .2s ease,filter .2s ease;
 }
 .ambience-toggle[aria-pressed="true"]{color:#e8b368;filter:drop-shadow(0 0 5px rgba(232,179,104,.55));}
@@ -740,7 +741,49 @@ footer{
   .ornate-frame{inset:7px;--corner:18px;}
   .market-depth svg{height:25vh;opacity:.12;}
   .wrap{padding:1.3rem .9rem 2.2rem;}
-  .ambience-toggle{font-size:.62rem;}
+  .ambience-toggle{top:.5rem;right:.5rem;width:2.75rem;height:2.75rem;}
+  nav#topics{
+    position:relative;
+    flex-wrap:nowrap;
+    justify-content:flex-start;
+    gap:.65rem;
+    margin:1rem -.9rem 1.1rem;
+    padding:.55rem .9rem .75rem;
+    overflow-x:auto;
+    overflow-y:hidden;
+    overscroll-behavior-x:contain;
+    scroll-snap-type:x proximity;
+    scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;
+  }
+  nav#topics::-webkit-scrollbar{display:none;}
+  nav#topics .topicbtn{flex:none;scroll-snap-align:center;}
+  nav#topics::after{
+    content:"›";
+    position:absolute;
+    left:calc((100% - var(--first-topic-width,230px))/2 - 2.7rem);
+    top:50%;
+    z-index:4;
+    display:grid;
+    place-items:center;
+    width:2.4rem;
+    height:3rem;
+    color:rgba(255,255,255,.78);
+    font:300 3rem/1 Arial,sans-serif;
+    text-shadow:0 0 9px rgba(255,255,255,.62);
+    pointer-events:none;
+    animation:mobile-swipe-cue 1.35s ease-in-out infinite;
+  }
+  nav#topics.swipe-cue-dismissed::after{display:none;}
+  @keyframes mobile-swipe-cue{
+    0%,100%{opacity:.48;transform:translate(-4px,-50%);}
+    50%{opacity:.9;transform:translate(4px,-50%);}
+  }
+  @media (prefers-reduced-motion:reduce){nav#topics::after{animation:none;}}
+  .topicbtn:hover,.topicbtn.active:hover,.zone:hover,.zone.selected:hover{
+    transform:none;
+    animation:none;
+  }
   .brand-banner img{
     width:min(52vw, 180px);
     max-width:180px;
@@ -759,6 +802,9 @@ footer{
       transparent 100%
     );
   }
+}
+@media (hover:none),(pointer:coarse){
+  .topicbtn:hover,.topicbtn.active:hover,.zone:hover,.zone.selected:hover{animation:none;}
 }
 .zonebar{margin-top:1.7rem;}
 .zonebar .zone{
@@ -1762,8 +1808,51 @@ function renderNav(){
     };
     topicsEl.appendChild(b);
   });
+  updateMobileTopicsLayout();
   window.dispatchEvent(new Event('topiciconschange'));
 }
+
+const mobileTopicsQuery=window.matchMedia('(max-width:520px)');
+let mobileTopicsInitialized=false;
+function updateMobileTopicsLayout(){
+  if(!mobileTopicsQuery.matches){
+    topicsEl.style.removeProperty('padding-left');
+    topicsEl.style.removeProperty('padding-right');
+    topicsEl.style.removeProperty('--first-topic-width');
+    mobileTopicsInitialized=false;
+    return;
+  }
+  const firstTopic=topicsEl.querySelector('.topicbtn');
+  if(!firstTopic)return;
+  const sideSpace=Math.max(14,(topicsEl.clientWidth-firstTopic.getBoundingClientRect().width)/2);
+  topicsEl.style.setProperty('--first-topic-width',`${firstTopic.getBoundingClientRect().width}px`);
+  topicsEl.style.paddingLeft=`${sideSpace}px`;
+  topicsEl.style.paddingRight=`${sideSpace}px`;
+  if(!mobileTopicsInitialized){
+    topicsEl.scrollLeft=0;
+    mobileTopicsInitialized=true;
+  }
+}
+let mobileTopicsTouchStart=null;
+topicsEl.addEventListener('touchstart',event=>{
+  if(mobileTopicsQuery.matches&&event.touches.length===1){
+    mobileTopicsTouchStart={x:event.touches[0].clientX,y:event.touches[0].clientY};
+  }
+},{passive:true});
+topicsEl.addEventListener('touchmove',event=>{
+  if(!mobileTopicsQuery.matches||!mobileTopicsTouchStart)return;
+  const touch=event.touches[0];
+  if(!touch)return;
+  const deltaX=touch.clientX-mobileTopicsTouchStart.x;
+  const deltaY=touch.clientY-mobileTopicsTouchStart.y;
+  if(Math.abs(deltaX)>8&&Math.abs(deltaX)>Math.abs(deltaY)){
+    topicsEl.classList.add('swipe-cue-dismissed');
+    mobileTopicsTouchStart=null;
+  }
+},{passive:true});
+topicsEl.addEventListener('touchend',()=>{mobileTopicsTouchStart=null;},{passive:true});
+topicsEl.addEventListener('touchcancel',()=>{mobileTopicsTouchStart=null;},{passive:true});
+window.addEventListener('resize',updateMobileTopicsLayout,{passive:true});
 
 function triggerTopicIconJump(topicId){
   if(prefersReducedMotion.matches) return;
@@ -1875,7 +1964,8 @@ render();
 
 </script>
 <script type="module">
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
+let THREE=null;
+const THREE_MODULE_URL='https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
 
 const viewport=document.getElementById('scaleViewport');
 
@@ -2699,6 +2789,7 @@ function initializeBalance(){
     });
     viewport.classList.add('webgl-ready');
     window.balanceScene={setBalance};
+    if(selectedZone)setBalance(selectedZone);
     initializeTopicWebGL();
     animationFrame=requestAnimationFrame(frame);
   }catch(error){
@@ -2706,7 +2797,51 @@ function initializeBalance(){
   }
 }
 
-initializeBalance();
+let threeModuleState='not-started';
+let balanceInitializationStarted=false;
+let balanceInitializationTimer=0;
+let balanceInitializationIdleCallback=0;
+function scheduleBalanceInitialization(){
+  if(balanceInitializationStarted)return;
+  window.clearTimeout(balanceInitializationTimer);
+  if(balanceInitializationIdleCallback&&window.cancelIdleCallback){
+    window.cancelIdleCallback(balanceInitializationIdleCallback);
+    balanceInitializationIdleCallback=0;
+  }
+  balanceInitializationTimer=window.setTimeout(()=>{
+    balanceInitializationTimer=0;
+    if(document.hidden)return;
+    if(threeModuleState==='not-started'){
+      threeModuleState='loading';
+      import(THREE_MODULE_URL).then(module=>{
+        THREE=module;
+        threeModuleState='ready';
+        scheduleBalanceInitialization();
+      }).catch(error=>{
+        threeModuleState='failed';
+        console.error('Unable to load Three.js; keeping the SVG balance visible.',error);
+      });
+      return;
+    }
+    if(threeModuleState!=='ready')return;
+    const initializeWhenIdle=()=>{
+      balanceInitializationIdleCallback=0;
+      if(document.hidden)return;
+      balanceInitializationStarted=true;
+      initializeBalance();
+    };
+    if(window.requestIdleCallback){
+      balanceInitializationIdleCallback=window.requestIdleCallback(initializeWhenIdle,{timeout:1200});
+    }else initializeWhenIdle();
+  },4000);
+}
+['pointerdown','touchstart','keydown','wheel'].forEach(eventName=>{
+  document.addEventListener(eventName,scheduleBalanceInitialization,{capture:true,passive:true});
+});
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden)scheduleBalanceInitialization();
+},{passive:true});
+scheduleBalanceInitialization();
 </script>
 </body>
 </html>
